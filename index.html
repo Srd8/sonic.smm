@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sonic SMM | لوحة الخدمات</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root { --sonic-blue: #0054b2; --sonic-dark: #001a3d; --sonic-gold: #ffb700; }
+        body { font-family: 'Cairo', sans-serif; background: var(--sonic-dark); color: #fff; margin: 0; min-height: 100vh; }
+        .card { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; }
+        .input-style { background: #001229; border: 1px solid #004494; border-radius: 14px; padding: 14px; color: white; width: 100%; outline: none; transition: 0.2s; border: 1px solid transparent; }
+        .input-style:focus { border-color: var(--sonic-gold); background: #001a3d; }
+        .sonic-btn { background: linear-gradient(45deg, #0054b2, #0078ff); border-radius: 14px; font-weight: 900; transition: 0.2s; cursor: pointer; border: none; color: white; }
+        .sonic-btn:hover { transform: translateY(-2px); filter: brightness(1.2); box-shadow: 0 10px 20px rgba(0, 84, 178, 0.3); }
+        .sonic-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .loader-ring { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid var(--sonic-gold); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-2xl mx-auto space-y-6">
+        <!-- الهيدر -->
+        <header class="flex justify-between items-center bg-white/5 p-4 rounded-3xl border border-white/5">
+            <div class="flex items-center gap-3">
+                <div class="bg-white p-1 rounded-full w-10 h-10 flex items-center justify-center">
+                    <img src="https://i.ibb.co/VMDmY7Y/Sonic-Logo.png" class="w-8 h-8" alt="Sonic">
+                </div>
+                <h1 class="text-xl font-black italic">SONIC <span class="text-yellow-400">SMM</span></h1>
+            </div>
+            <div id="bal" class="text-xs font-bold text-yellow-400 bg-yellow-400/10 px-3 py-1.5 rounded-full border border-yellow-400/20">
+                جاري التحقق..
+            </div>
+        </header>
+
+        <!-- صندوق التنبيهات -->
+        <div id="status" class="hidden p-4 rounded-2xl text-center text-sm font-bold animate-bounce"></div>
+
+        <main class="card p-6 md:p-10 shadow-2xl min-h-[400px] flex flex-col justify-center">
+            <!-- واجهة التحميل -->
+            <div id="loadingUI" class="text-center space-y-4">
+                <div class="flex justify-center"><div class="loader-ring"></div></div>
+                <p id="loaderText" class="text-blue-200 animate-pulse font-bold">جاري محاولة الاتصال عبر البروكسي 1...</p>
+                <button onclick="location.reload()" class="text-[10px] text-gray-500 underline uppercase tracking-widest">إعادة محاولة الاتصال</button>
+            </div>
+
+            <!-- واجهة النموذج -->
+            <div id="orderUI" class="hidden space-y-6">
+                <div>
+                    <label class="text-[10px] font-bold text-blue-300 uppercase mb-2 block mr-1">اختر القسم</label>
+                    <select id="catSel" class="input-style font-bold text-sm"></select>
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-blue-300 uppercase mb-2 block mr-1">نوع الخدمة</label>
+                    <select id="srvSel" class="input-style text-xs"></select>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] font-bold text-blue-300 uppercase mb-2 block mr-1">الرابط المستهدف</label>
+                        <input type="text" id="linkInp" placeholder="https://instagram.com/..." class="input-style text-sm">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-blue-300 uppercase mb-2 block mr-1">الكمية المطلوبة</label>
+                        <input type="number" id="qtyInp" placeholder="1000" class="input-style font-black text-center text-yellow-400">
+                    </div>
+                </div>
+                
+                <div class="bg-gradient-to-r from-blue-600/20 to-transparent p-6 rounded-3xl flex flex-col md:flex-row justify-between items-center gap-4 border border-blue-400/10">
+                    <div class="text-center md:text-right">
+                        <span class="text-[10px] text-blue-300 block mb-1 font-bold">المبلغ الإجمالي</span>
+                        <span id="priceVal" class="text-4xl font-black text-white leading-none">$0.00</span>
+                    </div>
+                    <button id="submitBtn" class="sonic-btn w-full md:w-auto px-12 py-5 italic text-lg shadow-xl active:scale-95">إرسال الطلب الآن ⚡</button>
+                </div>
+            </div>
+        </main>
+
+        <footer class="text-center space-y-2 opacity-30">
+            <p class="text-[9px] uppercase tracking-[0.3em]">Sonic Engine v3.1 | Multi-Proxy Support</p>
+        </footer>
+    </div>
+
+    <script>
+        const API_KEY = "0f6bbebeeda8f1fb616a506c9fd54e10";
+        const API_URL = "https://kd1s.com/api/v2";
+        const PROFIT_PERCENT = 1.30; 
+
+        // قائمة بوابات البروكسي لتجاوز الحظر وخطأ 413 و Failed to fetch
+        const PROXIES = [
+            "https://api.allorigins.win/raw?url=",
+            "https://api.codetabs.com/v1/proxy?quest=",
+            "https://thingproxy.freeboard.io/fetch/",
+            "https://cors-anywhere.herokuapp.com/" // يتطلب تفعيل يدوي أحياناً
+        ];
+
+        let allServices = [];
+
+        // دالة الاتصال المتقدمة مع تبديل البروكسي تلقائياً عند الفشل
+        async function callProvider(params) {
+            const query = new URLSearchParams({ key: API_KEY, ...params }).toString();
+            const targetUrl = `${API_URL}?${query}`;
+            let lastError = null;
+
+            for (let i = 0; i < PROXIES.length; i++) {
+                try {
+                    updateLoaderText(`جاري المحاولة عبر البوابة ${i + 1}...`);
+                    const response = await fetch(PROXIES[i] + encodeURIComponent(targetUrl));
+                    
+                    if (!response.ok) throw new Error(`Status ${response.status}`);
+                    
+                    const data = await response.json();
+                    if (data) return data;
+                } catch (err) {
+                    console.warn(`Proxy ${i + 1} failed:`, err);
+                    lastError = err;
+                    continue; // تجربة البروكسي التالي
+                }
+            }
+            throw lastError || new Error("جميع محاولات الاتصال فشلت");
+        }
+
+        function updateLoaderText(msg) {
+            const el = document.getElementById('loaderText');
+            if (el) el.innerText = msg;
+        }
+
+        async function init() {
+            try {
+                // محاولة جلب الخدمات
+                const servicesData = await callProvider({ action: 'services' });
+                
+                if (Array.isArray(servicesData) && servicesData.length > 0) {
+                    allServices = servicesData.map(s => ({
+                        ...s,
+                        rate: (parseFloat(s.rate) * PROFIT_PERCENT).toFixed(3)
+                    }));
+                    setupUI();
+                    
+                    // جلب الرصيد بعد نجاح الخدمات
+                    const balanceData = await callProvider({ action: 'balance' }).catch(() => null);
+                    if (balanceData && balanceData.balance) {
+                        document.getElementById('bal').innerText = `رصيدك: ${balanceData.balance} ${balanceData.currency}`;
+                    }
+                } else {
+                    throw new Error("تنسيق البيانات غير صحيح");
+                }
+            } catch (err) {
+                document.getElementById('loadingUI').innerHTML = `
+                    <p class="text-red-500 font-bold">❌ فشل الاتصال النهائي.</p>
+                    <p class="text-[10px] text-gray-400 mb-4">خطأ: ${err.message}</p>
+                    <div class="flex flex-col gap-2">
+                        <button onclick="location.reload()" class="sonic-btn px-6 py-2 text-xs">إعادة المحاولة</button>
+                    </div>
+                `;
+            }
+        }
+
+        function setupUI() {
+            document.getElementById('loadingUI').classList.add('hidden');
+            document.getElementById('orderUI').classList.remove('hidden');
+
+            const categories = [...new Set(allServices.map(s => s.category))];
+            const catDropdown = document.getElementById('catSel');
+            
+            catDropdown.innerHTML = '<option value="">-- اختر القسم المناسب --</option>' + 
+                categories.map(c => `<option value="${c}">${c}</option>`).join('');
+
+            catDropdown.onchange = () => {
+                const selectedCat = catDropdown.value;
+                const filtered = allServices.filter(s => s.category === selectedCat);
+                const srvDropdown = document.getElementById('srvSel');
+                
+                srvDropdown.innerHTML = filtered.map(s => 
+                    `<option value="${s.service}">${s.name} - ($${s.rate} لكل 1000)</option>`).join('');
+                calculatePrice();
+            };
+
+            document.getElementById('srvSel').onchange = calculatePrice;
+            document.getElementById('qtyInp').oninput = calculatePrice;
+        }
+
+        function calculatePrice() {
+            const qty = document.getElementById('qtyInp').value || 0;
+            const srvId = document.getElementById('srvSel').value;
+            const service = allServices.find(s => s.service == srvId);
+            
+            if (service) {
+                const total = (parseFloat(qty) / 1000) * parseFloat(service.rate);
+                document.getElementById('priceVal').innerText = "$" + total.toFixed(3);
+            } else {
+                document.getElementById('priceVal').innerText = "$0.00";
+            }
+        }
+
+        document.getElementById('submitBtn').onclick = async () => {
+            const btn = document.getElementById('submitBtn');
+            const data = {
+                action: 'add',
+                service: document.getElementById('srvSel').value,
+                link: document.getElementById('linkInp').value,
+                quantity: document.getElementById('qtyInp').value
+            };
+
+            if (!data.service || !data.link || !data.quantity) {
+                return showStatus("يرجى إكمال جميع البيانات قبل الطلب", true);
+            }
+
+            btn.disabled = true;
+            btn.innerText = "جاري إرسال الطلب...";
+
+            try {
+                const res = await callProvider(data);
+                if (res.order) {
+                    showStatus("✅ تم إرسال الطلب بنجاح! رقم الطلب: " + res.order, false);
+                    document.getElementById('linkInp').value = "";
+                    document.getElementById('qtyInp').value = "";
+                } else {
+                    showStatus("❌ فشل الطلب: " + (res.error || "تأكد من الرصيد"), true);
+                }
+            } catch (e) {
+                showStatus("عذراً، فشلت جميع بوابات الإرسال", true);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "إرسال الطلب الآن ⚡";
+            }
+        };
+
+        function showStatus(msg, isError) {
+            const box = document.getElementById('status');
+            box.innerText = msg;
+            box.className = `p-4 rounded-2xl text-center text-sm font-bold mb-4 shadow-lg ${isError ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`;
+            box.classList.remove('hidden');
+            setTimeout(() => box.classList.add('hidden'), 6000);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
